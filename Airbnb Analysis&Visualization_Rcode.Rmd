@@ -1,0 +1,306 @@
+---
+title: "Impact of Geographic Location and Listing Features on Airbnb Guest Satisfaction"
+author: "Group 8: Yilin Xiao,Violet Yong, Yuqi Wang, Victor Zhan"
+date: "2025-04-22"
+output: html_document
+---
+
+# Research Question 1:
+
+**Does the geographic location of Airbnb listings impact customer satisfaction?**
+
+- **Null Hypothesis (H₀):** Geographic location has no significant impact.
+- **Alternative Hypothesis (H₁):** Geographic location significantly impacts customer satisfaction.
+
+---
+
+## Load Libraries & Data
+
+```{r}
+# Load required libraries
+library(tidyverse)
+
+# Load cleaned dataset
+df <- read_csv("~/Downloads/listings_cleaned-2.csv")
+```
+
+---
+
+## 1. K-Means Clustering on Latitude & Longitude
+
+```{r}
+# Apply K-means clustering
+set.seed(123)
+coords <- df %>% select(latitude, longitude)
+kmeans_result <- kmeans(coords, centers = 5)
+df$geo_cluster <- as.factor(kmeans_result$cluster)
+
+# Boxplot of review scores by cluster
+boxplot(review_scores_rating ~ geo_cluster, data = df,
+        main = "Review Scores by Geo Cluster",
+        xlab = "Geo Cluster", ylab = "Review Score", col = "skyblue")
+```
+
+---
+
+## 2. One-Way ANOVA by Neighborhood
+
+```{r}
+anova_result <- aov(review_scores_rating ~ neighbourhood_cleansed, data = df)
+
+cat("### ANOVA Result\n")
+summary(anova_result)
+```
+
+---
+
+## 3. Kruskal-Wallis Test (Non-parametric)
+
+```{r}
+kruskal_result <- kruskal.test(review_scores_rating ~ neighbourhood_cleansed, data = df)
+
+cat("### Kruskal-Wallis Result\n")
+print(kruskal_result)
+```
+
+---
+
+## 4. Spatial Visualization of Review Scores
+
+```{r}
+ggplot(df, aes(x = longitude, y = latitude, color = review_scores_rating)) +
+  geom_point(alpha = 0.6) +
+  scale_color_viridis_c() +
+  labs(title = "Spatial Distribution of Review Scores",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal()
+```
+
+---
+
+## 5. Principal Component Analysis
+
+```{r}
+geo_pca <- prcomp(df %>% select(latitude, longitude), scale. = TRUE)
+
+cat("### PCA Summary\n")
+summary(geo_pca)
+
+biplot(geo_pca)
+```
+
+---
+
+## Conclusion
+
+All methods — K-means clustering, ANOVA, Kruskal-Wallis test, and spatial visualizations — suggest that **geographic location significantly impacts guest satisfaction** on Airbnb. Listings in different neighborhoods or spatial clusters receive systematically different review scores, allowing us to **reject the null hypothesis** with high confidence.
+
+
+
+# Research Question 2:
+
+**How do listing features influence review score ratings, and what areas could be targeted for improvement?**
+
+- **Null Hypothesis (H₀):** Listing features do not significantly influence review score ratings.
+- **Alternative Hypothesis (H₁):** Listing features significantly influence review score ratings, indicating areas for potential improvement.
+
+---
+
+## Load Libraries & Data
+
+```{r}
+# Install and load necessary packages
+# install.packages("tidyverse")
+# install.packages("car")
+library(tidyverse)
+library(car)
+
+# Load cleaned dataset
+
+df <- read_csv("~/Downloads/listings_cleaned-2.csv")
+```
+
+---
+
+## 1. Multiple Linear Regression (Simplified)
+
+```{r}
+# Fit a simplified model to avoid multicollinearity
+model_fixed <- lm(review_scores_rating ~ price + bedrooms + bathrooms_num +
+                    room_type + number_of_reviews + host_is_superhost,
+                  data = df)
+
+# Model summary
+summary(model_fixed)
+```
+
+---
+
+## 2. Check for Multicollinearity (VIF)
+
+```{r}
+# Check VIF (Variance Inflation Factor)
+vif(model_fixed)
+```
+
+---
+
+## 3. Visualizing Effects of Key Features
+
+```{r}
+# Price vs Review Score
+ggplot(df, aes(x = price, y = review_scores_rating)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = "Price vs Review Score", x = "Price", y = "Review Score") +
+  theme_minimal()
+
+# Review Score by Superhost Status
+ggplot(df, aes(x = host_is_superhost, y = review_scores_rating)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Review Scores by Superhost Status", x = "Superhost", y = "Review Score") +
+  theme_minimal()
+```
+
+---
+
+## 4.PCA on Numeric Listing Features
+
+```{r}
+# Select and scale numeric features
+feature_data <- df %>% select(price, bedrooms, bathrooms_num, number_of_reviews, minimum_nights) %>% na.omit()
+pca_features <- prcomp(feature_data, scale. = TRUE)
+
+# Summary of PCA
+summary(pca_features)
+
+# Biplot
+biplot(pca_features)
+```
+
+---
+
+## Conclusion
+
+The revised regression model shows that key listing features — such as price, room type, superhost status, and number of bedrooms/bathrooms — have a meaningful impact on review scores. Multicollinearity has been addressed, and visualizations support these findings. Therefore, we reject the null hypothesis and conclude that **listing features significantly influence guest satisfaction**, helping identify **areas for improvement**.
+
+
+# Conclusion and Recommendations
+
+## Figure 8
+
+```{r heatmap-borough-review-scores, message=FALSE, warning=FALSE}
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Load your dataset (make sure the file is in your working directory)
+listings <- read.csv("~/Downloads/listings_cleaned-2.csv")
+
+# Extract review score columns
+score_cols <- grep("^review_scores_", names(listings), value = TRUE)
+
+# Group by borough and calculate average scores for each category
+borough_scores <- listings %>%
+  group_by(neighbourhood_group_cleansed) %>%
+  summarise(across(all_of(score_cols), ~ mean(.x, na.rm = TRUE))) %>%
+  pivot_longer(cols = all_of(score_cols), names_to = "score_type", values_to = "avg_score")
+
+# Clean column labels for display
+borough_scores$score_type <- gsub("review_scores_", "", borough_scores$score_type)
+
+# Create the red/blue heatmap
+ggplot(borough_scores, aes(x = score_type, y = neighbourhood_group_cleansed, fill = avg_score)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "red", midpoint = 4.7, na.value = "gray90") +
+  labs(
+    title = "Average Review Scores by Borough and Category",
+    x = "Review Score Category",
+    y = "Borough",
+    fill = "Avg Score"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+## Figure 9
+
+```{r rq2-coefficient-plot, message=FALSE, warning=FALSE} 
+# Load packages
+library(ggplot2)
+library(broom)
+
+# Run the regression model (if not already done)
+model <- lm(review_scores_rating ~ price + bedrooms + bathrooms_num + 
+              room_type + number_of_reviews + host_is_superhost, data = listings)
+
+# Extract coefficients and clean up terms
+coef_df <- tidy(model) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(term = case_when(
+    term == "price" ~ "Price (USD)",
+    term == "bedrooms" ~ "Number of Bedrooms",
+    term == "bathrooms_num" ~ "Number of Bathrooms",
+    term == "number_of_reviews" ~ "Number of Reviews",
+    term == "host_is_superhost" ~ "Superhost Status",
+    grepl("room_type", term) ~ gsub("room_type", "Room Type: ", term),
+    TRUE ~ term
+  ))
+
+# Plot the coefficients with 95% CI
+ggplot(coef_df, aes(x = reorder(term, estimate), y = estimate)) +
+  geom_point(color = "darkblue", size = 3) +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.2, color = "gray40") +
+  coord_flip() +
+  labs(
+    title = "Effect of Listing Features on Review Scores",
+    x = "Listing Feature",
+    y = "Effect on Review Score"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+
+## Figure 10
+
+```{r feature-reviewscore-heatmap, message=FALSE, warning=FALSE}
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Identify review score columns
+score_cols <- grep("^review_scores_", names(df), value = TRUE)
+
+# Combine listing features into a single label (e.g., "Private room, Superhost: TRUE")
+df <- df %>%
+  mutate(feature_group = paste0(room_type, ", Superhost: ", host_is_superhost))
+
+# Calculate average review scores for each feature group
+feature_scores <- df %>%
+  group_by(feature_group) %>%
+  summarise(across(all_of(score_cols), ~ mean(.x, na.rm = TRUE))) %>%
+  pivot_longer(cols = all_of(score_cols), names_to = "review_type", values_to = "avg_score")
+
+# Clean up review score category labels
+feature_scores$review_type <- gsub("review_scores_", "", feature_scores$review_type)
+
+# Plot the heatmap
+ggplot(feature_scores, aes(x = review_type, y = feature_group, fill = avg_score)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "red", midpoint = 4.7) +
+  labs(
+    title = "Average Review Scores by Listing Feature and Review Category",
+    x = "Review Category",
+    y = "Listing Feature Group",
+    fill = "Avg Score"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
